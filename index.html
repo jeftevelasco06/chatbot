@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chatbot — Clima y Precio de Acciones</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;}
+    body{display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:linear-gradient(180deg,#f7fafc,#eef2ff);}
+    .card{width:720px;max-width:95%;background:white;border-radius:12px;box-shadow:0 10px 30px rgba(20,20,60,0.08);padding:20px}
+    header{display:flex;align-items:center;gap:12px}
+    h1{margin:0;font-size:18px}
+    p.lead{margin:6px 0 18px;color:#555}
+    .row{display:flex;gap:12px}
+    .col{flex:1}
+    label{font-size:12px;color:#444}
+    input,button{box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #e6e9ef;font-size:14px;width:100%}
+    button{cursor:pointer;background:#4f46e5;color:white;border:none}
+    .log{margin-top:12px;height:220px;overflow:auto;border-radius:8px;border:1px dashed #e8eaf6;padding:10px;background:#fbfdff}
+    .item{padding:8px;border-bottom:1px solid #f1f4fb}
+    .muted{color:#666;font-size:13px}
+    .small{font-size:13px}
+    .keys{display:flex;gap:8px;margin-bottom:12px}
+    .keys input{flex:1}
+    .hint{font-size:12px;color:#666;text-align:right;margin-top:10px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <header>
+      <div>
+        <h1>Chatbot: Clima & Precio de Acciones</h1>
+        <p class="lead">Introduce tus llaves API y pide clima o precio de acciones.</p>
+      </div>
+    </header>
+
+    <div class="keys">
+      <input id="owmKey" placeholder="OpenWeather API key" />
+      <input id="avKey" placeholder="Alpha Vantage API key" />
+      <button id="saveKeys">Guardar</button>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <label>Ciudad (clima)</label>
+        <input id="cityInput" placeholder="Mexico City" />
+      </div>
+      <div style="width:170px">
+        <label>Acción (símbolo)</label>
+        <input id="symbolInput" placeholder="AAPL" />
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="getWeather">Obtener Clima</button>
+      <button id="getQuote">Obtener Precio Acción</button>
+      <button id="clearLog" style="background:#ef4444">Limpiar</button>
+    </div>
+
+    <div class="log" id="log"></div>
+
+    <div class="hint">Las API keys se guardan localmente en tu navegador.</div>
+  </div>
+
+  <script>
+    // Helper
+    const $ = id => document.getElementById(id);
+    const logEl = $('log');
+
+    function appendLog(html){
+      const div = document.createElement('div');
+      div.className='item';
+      div.innerHTML = html;
+      logEl.prepend(div);
+    }
+
+    // Cargar keys guardadas
+    $('owmKey').value = localStorage.getItem('owmKey') || '';
+    $('avKey').value = localStorage.getItem('avKey') || '';
+
+    $('saveKeys').addEventListener('click', ()=>{
+      localStorage.setItem('owmKey', $('owmKey').value.trim());
+      localStorage.setItem('avKey', $('avKey').value.trim());
+      appendLog("<strong>Llaves guardadas.</strong>");
+    });
+
+    $('clearLog').addEventListener('click', ()=> logEl.innerHTML = "");
+
+    // ----------------- CLIMA -----------------
+    async function getWeather(city){
+      const key = localStorage.getItem('owmKey');
+      if(!key) return appendLog("<span class='muted'>Falta OpenWeather API key.</span>");
+      if(!city) return appendLog("<span class='muted'>Escribe una ciudad.</span>");
+
+      appendLog(`Buscando clima para <strong>${city}</strong>...`);
+
+      try{
+        const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${key}&units=metric&lang=es`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if(data.cod !== 200){
+          appendLog("<span class='muted'>Ciudad no encontrada.</span>");
+          return;
+        }
+
+        appendLog(`
+          <strong>Clima en ${data.name}</strong><br>
+          ${data.weather[0].description}<br>
+          Temp: ${data.main.temp}°C • Sensación: ${data.main.feels_like}°C<br>
+          Humedad: ${data.main.humidity}%
+        `);
+      }catch(err){
+        appendLog("<span class='muted'>Error de conexión.</span>");
+      }
+    }
+
+    // ----------------- ACCIONES -----------------
+    async function getQuote(symbol){
+      const key = localStorage.getItem('avKey');
+      if(!key) return appendLog("<span class='muted'>Falta Alpha Vantage API key.</span>");
+      if(!symbol) return appendLog("<span class='muted'>Escribe un símbolo de acción.</span>");
+
+      appendLog(`Buscando acción <strong>${symbol}</strong>...`);
+
+      try{
+        const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${key}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        const q = data["Global Quote"];
+        if(!q || Object.keys(q).length === 0){
+          appendLog("<span class='muted'>No hay datos (límite de API o símbolo incorrecto).</span>");
+          return;
+        }
+
+        appendLog(`
+          <strong>${symbol.toUpperCase()}</strong><br>
+          Precio: ${q["05. price"]}<br>
+          Cambio: ${q["09. change"]} (${q["10. change percent"]})
+        `);
+      }catch(err){
+        appendLog("<span class='muted'>Error de conexión.</span>");
+      }
+    }
+
+    // Eventos
+    $('getWeather').addEventListener('click',()=> getWeather($('cityInput').value.trim()));
+    $('getQuote').addEventListener('click',()=> getQuote($('symbolInput').value.trim()));
+  </script>
+</body>
+</html>
